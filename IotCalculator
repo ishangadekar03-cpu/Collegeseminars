@@ -1,0 +1,308 @@
+import javax.swing.*;
+import javax.swing.border.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.Timer;
+import java.util.TimerTask;
+
+public class IoTCalculator extends JFrame {
+    
+    private String espIp = "10.169.51.70";
+    private JTextField inputField;
+    private JLabel resultLabel;
+    private JLabel statusLabel;
+    private JPanel keypadPanel;
+    private Timer updateTimer;
+    
+    // Color scheme
+    private final Color BG_COLOR = new Color(44, 62, 80);
+    private final Color DISPLAY_COLOR = new Color(52, 73, 94);
+    private final Color OPERATOR_COLOR = new Color(52, 152, 219);
+    private final Color NUMBER_COLOR = new Color(46, 204, 113);
+    private final Color EQUALS_COLOR = new Color(46, 204, 113);
+    private final Color CLEAR_COLOR = new Color(231, 76, 60);
+    
+    public IoTCalculator() {
+        setTitle("IoT Calculator with Physical Keypad");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+        setSize(400, 600);
+        setLocationRelativeTo(null);
+        setResizable(false);
+        
+        // Ask for ESP8266 IP
+        String input = JOptionPane.showInputDialog(this, 
+            "Enter ESP8266 IP Address:", espIp);
+        if (input != null && !input.trim().isEmpty()) {
+            espIp = input.trim();
+        }
+        
+        createUI();
+        startPolling();
+        
+        // Add window listener to cleanup timer
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                if (updateTimer != null) {
+                    updateTimer.cancel();
+                }
+            }
+        });
+    }
+    
+    private void createUI() {
+        // Top Panel - Title
+        JPanel titlePanel = new JPanel();
+        titlePanel.setBackground(new Color(41, 128, 185));
+        titlePanel.setPreferredSize(new Dimension(400, 50));
+        
+        JLabel titleLabel = new JLabel("IoT CALCULATOR");
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 20));
+        titleLabel.setForeground(Color.WHITE);
+        titlePanel.add(titleLabel);
+        
+        add(titlePanel, BorderLayout.NORTH);
+        
+        // Main Panel
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+        mainPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        mainPanel.setBackground(BG_COLOR);
+        
+        // Display Panel
+        JPanel displayPanel = createDisplayPanel();
+        mainPanel.add(displayPanel, BorderLayout.NORTH);
+        
+        // Keypad Panel (Virtual keypad for backup)
+        keypadPanel = createKeypadPanel();
+        mainPanel.add(keypadPanel, BorderLayout.CENTER);
+        
+        // Info Panel
+        JPanel infoPanel = new JPanel(new BorderLayout());
+        infoPanel.setBackground(BG_COLOR);
+        infoPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
+        
+        statusLabel = new JLabel("Connecting to ESP8266...");
+        statusLabel.setFont(new Font("Arial", Font.PLAIN, 12));
+        statusLabel.setForeground(Color.WHITE);
+        infoPanel.add(statusLabel, BorderLayout.WEST);
+        
+        JLabel ipLabel = new JLabel("IP: " + espIp);
+        ipLabel.setFont(new Font("Arial", Font.PLAIN, 12));
+        ipLabel.setForeground(Color.WHITE);
+        infoPanel.add(ipLabel, BorderLayout.EAST);
+        
+        mainPanel.add(infoPanel, BorderLayout.SOUTH);
+        
+        add(mainPanel, BorderLayout.CENTER);
+    }
+    
+    private JPanel createDisplayPanel() {
+        JPanel panel = new JPanel(new BorderLayout(5, 5));
+        panel.setBackground(DISPLAY_COLOR);
+        panel.setBorder(BorderFactory.createCompoundBorder(
+            new LineBorder(Color.WHITE, 2),
+            new EmptyBorder(15, 15, 15, 15)
+        ));
+        
+        // Input field
+        inputField = new JTextField();
+        inputField.setFont(new Font("Monospaced", Font.PLAIN, 24));
+        inputField.setHorizontalAlignment(JTextField.RIGHT);
+        inputField.setEditable(false);
+        inputField.setBackground(Color.WHITE);
+        inputField.setForeground(Color.BLACK);
+        panel.add(inputField, BorderLayout.CENTER);
+        
+        // Result label
+        resultLabel = new JLabel("0");
+        resultLabel.setFont(new Font("Monospaced", Font.BOLD, 32));
+        resultLabel.setHorizontalAlignment(JLabel.RIGHT);
+        resultLabel.setForeground(new Color(46, 204, 113));
+        panel.add(resultLabel, BorderLayout.SOUTH);
+        
+        return panel;
+    }
+    
+    private JPanel createKeypadPanel() {
+        JPanel panel = new JPanel(new GridLayout(5, 4, 5, 5));
+        panel.setBackground(BG_COLOR);
+        
+        // Button labels - Using ASCII only
+        String[][] buttons = {
+            {"7", "8", "9", "+"},
+            {"4", "5", "6", "-"},
+            {"1", "2", "3", "C"},
+            {"0", ".", "=", "/"},
+            {"*", "", "", ""}
+        };
+        
+        for (int i = 0; i < buttons.length; i++) {
+            for (int j = 0; j < buttons[i].length; j++) {
+                String label = buttons[i][j];
+                
+                if (label.isEmpty()) {
+                    panel.add(new JLabel("")); // Empty cell
+                    continue;
+                }
+                
+                if (label.equals("C")) {
+                    JButton clearBtn = createButton("C", CLEAR_COLOR);
+                    clearBtn.addActionListener(e -> sendKey("C"));
+                    panel.add(clearBtn);
+                } else {
+                    JButton btn;
+                    if (label.matches("[0-9.]")) {
+                        btn = createButton(label, NUMBER_COLOR);
+                    } else if (label.equals("=")) {
+                        btn = createButton(label, EQUALS_COLOR);
+                    } else {
+                        btn = createButton(label, OPERATOR_COLOR);
+                    }
+                    
+                    final String key = label;
+                    btn.addActionListener(e -> sendKey(key));
+                    panel.add(btn);
+                }
+            }
+        }
+        
+        return panel;
+    }
+    
+    private JButton createButton(String text, Color bgColor) {
+        JButton btn = new JButton(text);
+        btn.setFont(new Font("Arial", Font.BOLD, 20));
+        btn.setBackground(bgColor);
+        btn.setForeground(Color.WHITE);
+        btn.setFocusPainted(false);
+        btn.setBorder(BorderFactory.createRaisedBevelBorder());
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        
+        // Add hover effect
+        btn.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                btn.setBackground(bgColor.darker());
+            }
+            
+            @Override
+            public void mouseExited(MouseEvent e) {
+                btn.setBackground(bgColor);
+            }
+        });
+        
+        return btn;
+    }
+    
+    private void sendKey(String key) {
+        new Thread(() -> {
+            try {
+                URL url = new URL("http://" + espIp + "/api/press");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "text/plain");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(2000);
+                conn.setReadTimeout(2000);
+                
+                OutputStream os = conn.getOutputStream();
+                os.write(key.getBytes());
+                os.flush();
+                
+                int responseCode = conn.getResponseCode();
+                if (responseCode == 200) {
+                    // Success - will be updated by polling
+                }
+                conn.disconnect();
+            } catch (Exception e) {
+                SwingUtilities.invokeLater(() -> {
+                    statusLabel.setText("Error sending key");
+                    statusLabel.setForeground(Color.RED);
+                });
+            }
+        }).start();
+    }
+    
+    private void startPolling() {
+        updateTimer = new Timer();
+        updateTimer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                fetchStatus();
+            }
+        }, 0, 1000); // Update every second
+    }
+    
+    private void fetchStatus() {
+        new Thread(() -> {
+            try {
+                URL url = new URL("http://" + espIp + "/api/status");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(2000);
+                conn.setReadTimeout(2000);
+                
+                int responseCode = conn.getResponseCode();
+                if (responseCode == 200) {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    String response = in.readLine();
+                    in.close();
+                    
+                    // Parse JSON manually
+                    String input = extractString(response, "input");
+                    String result = extractString(response, "result");
+                    
+                    SwingUtilities.invokeLater(() -> {
+                        inputField.setText(input.isEmpty() ? "0" : input);
+                        resultLabel.setText(result.isEmpty() ? "0" : result);
+                        statusLabel.setText("Connected to ESP8266");
+                        statusLabel.setForeground(new Color(46, 204, 113));
+                    });
+                } else {
+                    SwingUtilities.invokeLater(() -> {
+                        statusLabel.setText("Connection failed (HTTP " + responseCode + ")");
+                        statusLabel.setForeground(Color.RED);
+                    });
+                }
+                conn.disconnect();
+                
+            } catch (Exception e) {
+                SwingUtilities.invokeLater(() -> {
+                    statusLabel.setText("Disconnected - " + e.getMessage());
+                    statusLabel.setForeground(Color.RED);
+                });
+            }
+        }).start();
+    }
+    
+    private String extractString(String json, String key) {
+        try {
+            String pattern = "\"" + key + "\":\"";
+            int start = json.indexOf(pattern);
+            if (start == -1) return "";
+            start += pattern.length();
+            
+            int end = json.indexOf("\"", start);
+            if (end == -1) return "";
+            
+            return json.substring(start, end);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+    
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            try {
+                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            new IoTCalculator().setVisible(true);
+        });
+    }
+}
