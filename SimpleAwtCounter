@@ -1,0 +1,47 @@
+import java.awt.*;
+import java.awt.event.*;
+
+public class SimpleAwtCounter extends Frame implements ActionListener {
+    // Components
+    private Label countLabel;
+    private Button incrementBtn;
+    private int count = 100;
+    
+    public SimpleAwtCounter() {
+        // Set up the window
+        setTitle("Simple AWT Counter");
+        setSize(200, 400);
+        setLayout(new FlowLayout());
+        
+        // Create components
+        countLabel = new Label("Count: 100");
+        incrementBtn = new Button("Click Me!");
+        
+        // Add components to window
+        add(countLabel);
+        add(incrementBtn);
+        
+        // Add action listener to button
+        incrementBtn.addActionListener(this);
+        
+        // Handle window closing
+        addWindowListener(new WindowAdapter() {
+            public void windowClosing(WindowEvent e) {
+                System.exit(0);
+            }
+        });
+        
+        // Make window visible
+        setVisible(true);
+    }
+    
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        count++;
+        countLabel.setText("Count: " + count);
+    }
+    
+    public static void main(String[] args) {
+        new SimpleAwtCounter();
+    }
+}
