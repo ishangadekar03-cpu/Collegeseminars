@@ -1,0 +1,66 @@
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+
+public class SimpleSwingCounter extends JFrame implements ActionListener {
+    // Swing components
+    private JLabel countLabel;
+    private JButton incrementBtn;
+    private JButton resetBtn;
+    private int count = 0;
+    
+    public SimpleSwingCounter() {
+        // Set up JFrame
+        setTitle("Simple Swing Counter");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(1850, 1550);
+        setLocationRelativeTo(null); // Center on screen
+        
+        // Create panel to hold components
+        JPanel panel = new JPanel();
+        panel.setLayout(new FlowLayout());
+        
+        // Create components with better styling
+        countLabel = new JLabel("Count: 0");
+        countLabel.setFont(new Font("Arial", Font.BOLD, 24));
+        
+        incrementBtn = new JButton("Count +1");
+        incrementBtn.setFont(new Font("Arial", Font.PLAIN, 16));
+        
+        resetBtn = new JButton("Reset");
+        resetBtn.setFont(new Font("Arial", Font.PLAIN, 16));
+        
+        // Add action listeners
+        incrementBtn.addActionListener(this);
+        resetBtn.addActionListener(this);
+        
+        // Add components to panel
+        panel.add(countLabel);
+        panel.add(incrementBtn);
+        panel.add(resetBtn);
+        
+        // Add panel to frame
+        add(panel);
+        
+        // Show window
+        setVisible(true);
+    }
+    
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        if (e.getSource() == incrementBtn) {
+            count++;
+            countLabel.setText("Count: " + count);
+        } else if (e.getSource() == resetBtn) {
+            count = 0;
+            countLabel.setText("Count: " + count);
+        }
+    }
+    
+    public static void main(String[] args) {
+        // Run on Event Dispatch Thread
+        SwingUtilities.invokeLater(() -> {
+            new SimpleSwingCounter();
+        });
+    }
+}
