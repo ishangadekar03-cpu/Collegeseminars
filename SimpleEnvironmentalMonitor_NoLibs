@@ -1,0 +1,275 @@
+import javax.swing.*;
+import javax.swing.border.TitledBorder;
+import javax.swing.table.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.List;
+import java.util.Timer;
+
+public class SimpleEnvironmentalMonitor_NoLibs extends JFrame {
+    
+    private String espIp = "192.168.0.120";
+    private JLabel tempLabel, humLabel, airLabel, statusLabel;
+    private JTable dataTable;
+    private DefaultTableModel tableModel;
+    private JPanel chartPanel;
+    private List<Integer> airQualityHistory;
+    private JProgressBar airQualityBar;
+    
+
+    public SimpleEnvironmentalMonitor_NoLibs() {
+        setTitle("Environmental Monitoring System");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+        setSize(900, 650);
+        setLocationRelativeTo(null);
+        
+        airQualityHistory = new ArrayList<>();
+        
+        String input = JOptionPane.showInputDialog(this, 
+            "Enter ESP8266 IP Address:", espIp);
+        if (input != null && !input.trim().isEmpty()) {
+            espIp = input.trim();
+        }
+        
+        createUI();
+        startDataCollection();
+    }
+    
+   private void createUI() {
+    // Top Panel
+    JPanel topPanel = new JPanel(new GridLayout(1, 4, 10, 10));
+    topPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+    topPanel.setBackground(new Color(41, 128, 185));
+    
+    topPanel.add(createSensorPanel("🌡️ Temperature", 
+        tempLabel = new JLabel("--°C", SwingConstants.CENTER), 
+        new Color(46, 204, 113)));
+    topPanel.add(createSensorPanel("💧 Humidity", 
+        humLabel = new JLabel("--%", SwingConstants.CENTER), 
+        new Color(52, 152, 219)));
+    topPanel.add(createSensorPanel("🌫️ Air Quality", 
+        airLabel = new JLabel("--", SwingConstants.CENTER), 
+        new Color(155, 89, 182)));
+    
+    JPanel meterPanel = new JPanel(new BorderLayout());
+    meterPanel.setBackground(new Color(41, 128, 185));
+    meterPanel.setBorder(BorderFactory.createTitledBorder(
+        BorderFactory.createLineBorder(Color.WHITE), 
+        "Air Quality Level",
+        TitledBorder.CENTER, TitledBorder.TOP, 
+        new Font("Arial", Font.BOLD, 12), Color.WHITE));
+    
+    airQualityBar = new JProgressBar(0, 1024);
+    airQualityBar.setStringPainted(true);
+    airQualityBar.setPreferredSize(new Dimension(200, 30));
+    meterPanel.add(airQualityBar, BorderLayout.CENTER);
+    
+    topPanel.add(meterPanel);
+    add(topPanel, BorderLayout.NORTH);  // Top region
+    
+    // Chart Panel
+    chartPanel = new JPanel() {
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            drawChart(g);
+        }
+    };
+    chartPanel.setBackground(Color.WHITE);
+    chartPanel.setPreferredSize(new Dimension(800, 200));
+    chartPanel.setBorder(BorderFactory.createTitledBorder("Air Quality History"));
+    add(chartPanel, BorderLayout.CENTER);  // Center region
+    
+    // Create a combined panel for bottom section
+    JPanel bottomPanel = new JPanel(new BorderLayout());
+    
+    // Table
+    String[] columns = {"Time", "Temp (°C)", "Humidity (%)", "Air Quality", "Status"};
+    tableModel = new DefaultTableModel(columns, 0);
+    dataTable = new JTable(tableModel);
+    dataTable.setRowHeight(25);
+    
+    JScrollPane scrollPane = new JScrollPane(dataTable);
+    scrollPane.setPreferredSize(new Dimension(800, 150));
+    bottomPanel.add(scrollPane, BorderLayout.CENTER);  // Table in center of bottom panel
+    
+    // Control Panel
+    JPanel controlPanel = new JPanel(new FlowLayout());
+    JButton refreshBtn = new JButton("Refresh");
+    refreshBtn.addActionListener(e -> fetchData());
+    controlPanel.add(refreshBtn);
+    
+    JButton exportBtn = new JButton("Export CSV");
+    exportBtn.addActionListener(e -> exportCSV());
+    controlPanel.add(exportBtn);
+    
+    JButton clearBtn = new JButton("Clear");
+    clearBtn.addActionListener(e -> clearHistory());
+    controlPanel.add(clearBtn);
+    
+    bottomPanel.add(controlPanel, BorderLayout.NORTH);  // Controls at top of bottom panel
+    
+    // Status
+    statusLabel = new JLabel("Connecting...");
+    statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+    bottomPanel.add(statusLabel, BorderLayout.SOUTH);  // Status at bottom of bottom panel
+    
+    add(bottomPanel, BorderLayout.SOUTH);  // Add entire bottom panel to SOUTH
+}
+    private JPanel createSensorPanel(String title, JLabel label, Color color) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBackground(new Color(41, 128, 185));
+        panel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(Color.WHITE), title,
+            TitledBorder.CENTER, TitledBorder.TOP, 
+            new Font("Arial", Font.BOLD, 12), Color.WHITE));
+        
+        label.setFont(new Font("Arial", Font.BOLD, 24));
+        label.setForeground(color);
+        panel.add(label, BorderLayout.CENTER);
+        
+        return panel;
+    }
+    
+    private void drawChart(Graphics g) {
+        int w = chartPanel.getWidth();
+        int h = chartPanel.getHeight() - 30;
+        
+        if (airQualityHistory.isEmpty()) {
+            g.setColor(Color.GRAY);
+            g.drawString("No data", w/2-20, h/2);
+            return;
+        }
+        
+        // Draw bars
+        int barWidth = (w - 100) / Math.min(airQualityHistory.size(), 50);
+        int x = 50;
+        
+        List<Integer> recent = airQualityHistory.size() > 50 ? 
+            airQualityHistory.subList(airQualityHistory.size()-50, airQualityHistory.size()) : 
+            airQualityHistory;
+        
+        for (int value : recent) {
+            int barHeight = (int)((value / 1024.0) * (h - 50));
+            
+            if (value < 200) g.setColor(Color.GREEN);
+            else if (value < 400) g.setColor(Color.YELLOW);
+            else if (value < 600) g.setColor(Color.ORANGE);
+            else g.setColor(Color.RED);
+            
+            g.fillRect(x, h - barHeight - 20, barWidth-2, barHeight);
+            x += barWidth;
+        }
+    }
+    
+    private void startDataCollection() {
+        Timer timer = new Timer();
+        timer.scheduleAtFixedRate(new TimerTask() {
+            @Override
+            public void run() {
+                fetchData();
+            }
+        }, 0, 5000);
+    }
+    
+    private void fetchData() {
+        new Thread(() -> {
+            try {
+                URL url = new URL("http://" + espIp + "/api/current");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(3000);
+                
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    String response = in.readLine();
+                    in.close();
+                    
+                    double temp = extractValue(response, "temperature");
+                    double hum = extractValue(response, "humidity");
+                    int air = (int) extractValue(response, "airQuality");
+                    
+                    SwingUtilities.invokeLater(() -> updateDisplay(temp, hum, air));
+                }
+                conn.disconnect();
+            } catch (Exception e) {
+                statusLabel.setText("Error: " + e.getMessage());
+            }
+        }).start();
+    }
+    
+    private double extractValue(String json, String key) {
+        try {
+            String pattern = "\"" + key + "\":";
+            int start = json.indexOf(pattern) + pattern.length();
+            int end = json.indexOf(",", start);
+            if (end == -1) end = json.indexOf("}", start);
+            return Double.parseDouble(json.substring(start, end));
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+    
+    private void updateDisplay(double temp, double hum, int air) {
+        tempLabel.setText(String.format("%.1f°C", temp));
+        humLabel.setText(String.format("%.1f%%", hum));
+        airLabel.setText(String.valueOf(air));
+        
+        airQualityBar.setValue(air);
+        if (air < 200) airQualityBar.setForeground(Color.GREEN);
+        else if (air < 400) airQualityBar.setForeground(Color.YELLOW);
+        else if (air < 600) airQualityBar.setForeground(Color.ORANGE);
+        else airQualityBar.setForeground(Color.RED);
+        
+        airQualityHistory.add(air);
+        if (airQualityHistory.size() > 100) airQualityHistory.remove(0);
+        
+        String time = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+        String status = air < 200 ? "Good" : air < 400 ? "Moderate" : air < 600 ? "Poor" : "Very Poor";
+        
+        tableModel.insertRow(0, new Object[]{time, 
+            String.format("%.1f", temp), 
+            String.format("%.1f", hum), 
+            air, status});
+        
+        if (tableModel.getRowCount() > 50) {
+            tableModel.removeRow(tableModel.getRowCount() - 1);
+        }
+        
+        chartPanel.repaint();
+        statusLabel.setText("Connected - Last update: " + time);
+    }
+    
+    private void clearHistory() {
+        airQualityHistory.clear();
+        tableModel.setRowCount(0);
+        chartPanel.repaint();
+    }
+    
+    private void exportCSV() {
+        try (PrintWriter w = new PrintWriter("sensor_data.csv")) {
+            for (int r = 0; r < tableModel.getRowCount(); r++) {
+                for (int c = 0; c < tableModel.getColumnCount(); c++) {
+                    w.print(tableModel.getValueAt(r, c));
+                    if (c < tableModel.getColumnCount()-1) w.print(",");
+                }
+                w.println();
+            }
+            JOptionPane.showMessageDialog(this, "Data exported!");
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+        }
+    }
+    
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> 
+            new SimpleEnvironmentalMonitor_NoLibs().setVisible(true));
+    }
+}
