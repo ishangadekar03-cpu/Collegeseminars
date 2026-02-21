@@ -1,0 +1,101 @@
+import java.awt.*;
+import java.awt.event.*;
+import java.net.*;
+import java.io.*;
+
+public class SmartEmergencyPanel extends Frame {
+
+    String ESP_IP = "192.168.0.117";  
+
+    TextArea output;
+
+    public SmartEmergencyPanel() {
+
+        setTitle("SMART SECURITY CONTROL TERMINAL");
+        setSize(600,400);
+        setLayout(new BorderLayout());
+        setBackground(Color.BLACK);
+
+        
+        Label title = new Label("SMART EMBEDDED EMERGENCY CONTROL", Label.CENTER);
+        title.setForeground(Color.CYAN);
+        title.setFont(new Font("Arial", Font.BOLD, 22));
+        add(title, BorderLayout.NORTH);
+
+      
+        Panel panel = new Panel();
+        panel.setBackground(Color.DARK_GRAY);
+
+        Button emergencyBtn = new Button("ACTIVATE EMERGENCY");
+        Button resetBtn = new Button("RESET SYSTEM");
+        Button statusBtn = new Button("GET SYSTEM STATUS");
+
+        emergencyBtn.setBackground(Color.RED);
+        emergencyBtn.setForeground(Color.WHITE);
+        emergencyBtn.setFont(new Font("Arial", Font.BOLD, 16));
+
+        resetBtn.setBackground(Color.GREEN);
+        resetBtn.setForeground(Color.BLACK);
+        resetBtn.setFont(new Font("Arial", Font.BOLD, 16));
+
+        statusBtn.setBackground(Color.ORANGE);
+        statusBtn.setForeground(Color.BLACK);
+        statusBtn.setFont(new Font("Arial", Font.BOLD, 16));
+
+        panel.add(emergencyBtn);
+        panel.add(resetBtn);
+        panel.add(statusBtn);
+
+        add(panel, BorderLayout.CENTER);
+
+        
+        output = new TextArea();
+        output.setBackground(Color.BLACK);
+        output.setForeground(Color.GREEN);
+        output.setFont(new Font("Monospaced", Font.BOLD, 16));
+        add(output, BorderLayout.SOUTH);
+
+        
+        emergencyBtn.addActionListener(e -> sendCommand("/emg"));
+        resetBtn.addActionListener(e -> sendCommand("/reset"));
+        statusBtn.addActionListener(e -> sendCommand("/status"));
+
+        
+        addWindowListener(new WindowAdapter(){
+            public void windowClosing(WindowEvent e){
+                dispose();
+                System.exit(0);
+            }
+        });
+
+        setVisible(true);
+    }
+
+    void sendCommand(String path){
+        try{
+            URL url = new URL("http://" + ESP_IP + path);
+            HttpURLConnection con = (HttpURLConnection) url.openConnection();
+            con.setRequestMethod("GET");
+
+            BufferedReader in = new BufferedReader(
+                    new InputStreamReader(con.getInputStream()));
+
+            String inputLine;
+            String response = "";
+
+            while ((inputLine = in.readLine()) != null) {
+                response += inputLine;
+            }
+            in.close();
+
+            output.setText("ESP RESPONSE:\n" + response);
+
+        }catch(Exception ex){
+            output.setText("ERROR:\n" + ex.getMessage());
+        }
+    }
+
+    public static void main(String[] args){
+        new SmartEmergencyPanel();
+    }
+}
