@@ -1,0 +1,58 @@
+import java.awt.*;
+import java.io.*;
+import java.net.*;
+
+public class SnakeScoreBoard extends Frame {
+
+    private Label scoreLabel;
+    private String espIP = "192.168.1.105";  // PUT YOUR ESP IP HERE
+
+    public SnakeScoreBoard() {
+        setTitle("Snake Game Score Board");
+        setSize(400, 200);
+        setLayout(new FlowLayout());
+
+        scoreLabel = new Label("Score: 0");
+        scoreLabel.setFont(new Font("Arial", Font.BOLD, 28));
+
+        add(scoreLabel);
+        setVisible(true);
+
+        startPolling();
+    }
+
+    private void startPolling() {
+        new Thread(() -> {
+            while (true) {
+                try {
+                    URL url = new URL("http://" + espIP + "/score");
+                    HttpURLConnection con = (HttpURLConnection) url.openConnection();
+                    con.setRequestMethod("GET");
+
+                    BufferedReader in = new BufferedReader(
+                            new InputStreamReader(con.getInputStream()));
+
+                    String score = in.readLine();
+                    in.close();
+
+                    updateScore(score);
+
+                    Thread.sleep(500);
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
+    }
+
+    private void updateScore(String score) {
+        EventQueue.invokeLater(() -> {
+            scoreLabel.setText("Score: " + score);
+        });
+    }
+
+    public static void main(String[] args) {
+        new SnakeScoreBoard();
+    }
+}
